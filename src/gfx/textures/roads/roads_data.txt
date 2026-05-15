@@ -1,0 +1,5 @@
+Road_straight|Road Straight|Standard two-lane road section, place in a line|500|10 asphalt|1
+Road_turn|Road Turn|Road turn section, 4 rotations available|600|15 asphalt|0
+Road_intersection|Road Intersection|Road intersection, 5 configurations available|800|20 asphalt|0
+Bus_stop|Bus Stop|Public bus stop for citizen transport|2000|50 steel, 100 concrete|0
+Vehicle_station|Vehicle Station|Main vehicle and tram depot|15000|500 steel, 1000 concrete|0

@@ -1,0 +1,4 @@
+# id | Display Name | Description | Cost | Materials | isDraggable (1=yes)
+Factory_connection|Conveyor Straight|Straight conveyor belt segment connecting industrial buildings. Drag to place multiple tiles.|300|5 steel|1
+Factory_connection_turn|Conveyor Turn|90-degree conveyor turn. 4 rotations available.|400|8 steel|0
+Factory_connection_intersetion|Conveyor Intersection|Conveyor crossing point. Allows belts to cross or split.|500|12 steel|0

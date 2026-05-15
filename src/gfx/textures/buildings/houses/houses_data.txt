@@ -1,0 +1,3 @@
+
+Block_1|Block 1|Standard concrete apartment block, can houses up to 200 citizens|10000|100 steel, 1000 concrete|1|1
+Block_2|Block 2|Slightly better concrete apartment block, can houses up to 400 citizens|20000|200 steel, 2000 concrete|1|2
