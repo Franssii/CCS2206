@@ -1,5 +1,8 @@
 #include "include/BuildingManager.hpp"
+#include "include/DetailPanelUtil.hpp"
 #include "include/RoadManager.hpp"
+#include "include/IndustrialManager.hpp"
+#include "include/CitizenManager.hpp"
 #include <fstream>
 #include <sstream>
 #include <cmath>
@@ -47,6 +50,7 @@ BuildingManager::BuildingManager(const sf::Font& font,
       _hlSprite(hlTexture),
       _ghostSprite(hlTexture)
 {
+    scaleCloseSprite(_closeBtn, closeTexture);
 }
 
 void BuildingManager::loadHouses(const std::string& dataFilePath,
@@ -112,6 +116,10 @@ void BuildingManager::loadHouses(const std::string& dataFilePath,
                 def.gridH = 2;
             }
         }
+        if (parts.size() >= 8)
+            def.capacity = std::stoi(trim(parts[7]));
+        if (parts.size() >= 9)
+            def.powerDraw = std::stoi(trim(parts[8]));
 
         _defIndex[def.id] = _defs.size();
         _defs.push_back(std::move(def));
@@ -652,4 +660,315 @@ void BuildingManager::drawWorldOverlay(sf::RenderWindow& w, float stepX, float s
     }
 
     w.draw(_ghostSprite);
+}
+
+void BuildingManager::clear() {
+    _placed.clear();
+    closeDetail();
+}
+
+bool BuildingManager::findAt(int gx, int gy, int& outIdx) const {
+    for (size_t i = 0; i < _placed.size(); ++i) {
+        const auto& pb = _placed[i];
+        int pw = 1, ph = 1;
+        getGridSize(pb.defId, pw, ph);
+        if (gx >= pb.gridX && gx < pb.gridX + pw &&
+            gy >= pb.gridY && gy < pb.gridY + ph) {
+            outIdx = static_cast<int>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+bool BuildingManager::tryOpenDetailAtWorld(sf::Vector2f worldPos, float stepX, float stepY,
+                                           sf::RenderWindow& window, const sf::View& gameView)
+{
+    sf::Vector2i g = worldToGrid(worldPos, stepX, stepY);
+    int idx = -1;
+    if (!findAt(g.x, g.y, idx)) return false;
+    openDetail(idx, window, gameView);
+    return true;
+}
+
+float BuildingManager::computeDetailHeight() const {
+    float lineH = static_cast<float>(BM_FONT_SIZE) + 8.f;
+    float h = BM_TITLEBAR_H + 12.f + 4.f * lineH + 6.f + 3.f * 36.f + 10.f;
+    if (_pickingWorkplace) {
+        h += 4.f + lineH;
+        if (_reachableWorkIndices.empty() && _reachableBusStops.empty())
+            h += lineH;
+        else {
+            h += static_cast<float>(_reachableWorkIndices.size()) * 36.f;
+            h += static_cast<float>(_reachableBusStops.size()) * 36.f;
+        }
+    }
+    return std::max(BM_DETAIL_MIN_H, h);
+}
+
+void BuildingManager::openDetail(int placedIdx, sf::RenderWindow& window, const sf::View& gameView) {
+    if (placedIdx < 0 || placedIdx >= static_cast<int>(_placed.size())) return;
+    _detailOpen = true;
+    _detailIdx = placedIdx;
+    _detailScroll = 0;
+    _pickingWorkplace = false;
+    _reachableWorkIndices.clear();
+    _reachableBusStops.clear();
+    _detailH = computeDetailHeight();
+    _detailPos = panelPosBesideBuilding(_placed[placedIdx].worldPos, window, gameView,
+                                        BM_DETAIL_W, _detailH);
+    _detailCloseRect = detailCloseRect(_detailPos, BM_DETAIL_W, BM_TITLEBAR_H);
+}
+
+void BuildingManager::closeDetail() {
+    _detailOpen = false;
+    _detailIdx = -1;
+    _pickingWorkplace = false;
+    _reachableWorkIndices.clear();
+    _reachableBusStops.clear();
+}
+
+int BuildingManager::getTotalHousingCapacity() const {
+    int total = 0;
+    for (const auto& pb : _placed)
+        total += getCapacityFor(pb);
+    return total;
+}
+
+int BuildingManager::getCapacityFor(const PlacedBuilding& pb) const {
+    auto it = _defIndex.find(pb.defId);
+    if (it == _defIndex.end()) return 0;
+    return _defs[it->second].capacity;
+}
+
+int BuildingManager::getPowerDrawFor(const PlacedBuilding& pb) const {
+    auto it = _defIndex.find(pb.defId);
+    if (it == _defIndex.end()) return 0;
+    return _defs[it->second].powerDraw;
+}
+
+void BuildingManager::getGridSize(const std::string& defId, int& outW, int& outH) const {
+    outW = 1; outH = 1;
+    auto it = _defIndex.find(defId);
+    if (it != _defIndex.end()) {
+        outW = _defs[it->second].gridW;
+        outH = _defs[it->second].gridH;
+    }
+}
+
+void BuildingManager::addDetailHit(float x, float y, float w, float h, const std::string& id) {
+    _detailHits.push_back({sf::FloatRect({x, y}, {w, h}), id});
+}
+
+const BuildingManager::DetailHitBox* BuildingManager::detailHitAt(sf::Vector2f p) const {
+    for (const auto& h : _detailHits)
+        if (h.rect.contains(p)) return &h;
+    return nullptr;
+}
+
+bool BuildingManager::handleDetailEvent(const sf::Event& event, sf::RenderWindow& window,
+                                        RoadManager* rm, IndustrialManager* im, CitizenManager* cm,
+                                        VehicleManager* vm)
+{
+    if (!_detailOpen || _detailIdx < 0) return false;
+
+    sf::Vector2f mp = window.mapPixelToCoords(sf::Mouse::getPosition(window), window.getDefaultView());
+    _detailMousePos = mp;
+
+    if (const auto* kp = event.getIf<sf::Event::KeyPressed>()) {
+        if (kp->code == sf::Keyboard::Key::Escape) {
+            if (_pickingWorkplace && rm) {
+                _pickingWorkplace = false;
+                _reachableWorkIndices.clear();
+                _reachableBusStops.clear();
+                rm->clearWorkplaceHighlights();
+            } else {
+                closeDetail();
+            }
+            return true;
+        }
+        return false;
+    }
+
+    if (const auto* mb = event.getIf<sf::Event::MouseButtonPressed>()) {
+        if (mb->button != sf::Mouse::Button::Left) return false;
+
+        if (_detailCloseRect.contains(mp)) {
+            closeDetail();
+            if (rm) rm->clearWorkplaceHighlights();
+            return true;
+        }
+
+        const DetailHitBox* h = detailHitAt(mp);
+        if (!h) return true;
+
+        if (h->id == "assign_work" && rm && im && cm) {
+            _pickingWorkplace = true;
+            const auto& house = _placed[_detailIdx];
+            int hw = 1, hh = 1;
+            getGridSize(house.defId, hw, hh);
+            _reachableWorkIndices =
+                rm->findReachableIndustrialIndices(house.gridX, house.gridY, hw, hh, *im, 20);
+            _reachableBusStops =
+                rm->findReachableBusStops(house.gridX, house.gridY, hw, hh, 20);
+            rm->setWorkplaceHighlights(_reachableWorkIndices);
+            rm->setAssignBusStopHighlights(_reachableBusStops);
+            _detailH = computeDetailHeight();
+            return true;
+        }
+        if (h->id == "clear_work" && cm) {
+            cm->clearWorkplace(*this, _detailIdx);
+            if (rm) rm->clearWorkplaceHighlights();
+            _pickingWorkplace = false;
+            _reachableWorkIndices.clear();
+            _reachableBusStops.clear();
+            return true;
+        }
+        if (h->id == "toggle_bus") {
+            _placed[_detailIdx].useBusCommute = !_placed[_detailIdx].useBusCommute;
+            return true;
+        }
+        if (h->id.rfind("work_", 0) == 0 && cm && im && rm && vm) {
+            int widx = std::atoi(h->id.c_str() + 5);
+            if (cm->assignWorkplace(*this, _detailIdx, widx, *rm, *im, *vm, 20)) {
+                _pickingWorkplace = false;
+                _reachableWorkIndices.clear();
+                _reachableBusStops.clear();
+                rm->clearWorkplaceHighlights();
+            }
+            return true;
+        }
+        if (h->id.rfind("stop_", 0) == 0 && cm && im && rm && vm) {
+            int sx = 0, sy = 0;
+            if (std::sscanf(h->id.c_str(), "stop_%d_%d", &sx, &sy) == 2 &&
+                cm->assignBoardingStop(*this, _detailIdx, sx, sy, *rm, *im, *vm, 20)) {
+                _pickingWorkplace = false;
+                _reachableWorkIndices.clear();
+                _reachableBusStops.clear();
+                rm->clearWorkplaceHighlights();
+            }
+            return true;
+        }
+        return true;
+    }
+
+    return false;
+}
+
+void BuildingManager::drawDetailPanel(sf::RenderWindow& w, const IndustrialManager* im,
+                                      bool powerShortage) {
+    if (!_detailOpen || _detailIdx < 0) return;
+
+    _detailHits.clear();
+    _detailMousePos = w.mapPixelToCoords(sf::Mouse::getPosition(w), w.getDefaultView());
+    _detailH = computeDetailHeight();
+
+    const PlacedBuilding& pb = _placed[_detailIdx];
+    auto defIt = _defIndex.find(pb.defId);
+    std::string name = (defIt != _defIndex.end()) ? _defs[defIt->second].displayName : pb.defId;
+    int cap = getCapacityFor(pb);
+    int power = getPowerDrawFor(pb);
+
+    sf::RectangleShape bg({BM_DETAIL_W, _detailH});
+    bg.setPosition(_detailPos);
+    bg.setFillColor(sf::Color(10, 10, 10, 245));
+    bg.setOutlineColor(sf::Color::White);
+    bg.setOutlineThickness(3.f);
+    w.draw(bg);
+
+    sf::RectangleShape tb({BM_DETAIL_W, BM_TITLEBAR_H});
+    tb.setPosition(_detailPos);
+    tb.setFillColor(sf::Color(200, 100, 0));
+    w.draw(tb);
+
+    sf::Text title(_font, "HOUSE - " + name, BM_FONT_SIZE + 2);
+    title.setFillColor(sf::Color::White);
+    title.setStyle(sf::Text::Style::Bold);
+    title.setPosition({_detailPos.x + 10.f, _detailPos.y + 6.f});
+    w.draw(title);
+    drawDetailCloseButton(w, _closeBtn, _detailPos, BM_DETAIL_W, BM_TITLEBAR_H, _detailCloseRect);
+
+    float x = _detailPos.x + 14.f;
+    float y = _detailPos.y + BM_TITLEBAR_H + 12.f;
+    float lineH = static_cast<float>(BM_FONT_SIZE) + 8.f;
+
+    auto drawLine = [&](const std::string& txt, sf::Color col = sf::Color(220, 220, 220)) {
+        sf::Text t(_font, txt, BM_FONT_SIZE);
+        t.setFillColor(col);
+        t.setPosition({x, y});
+        w.draw(t);
+        y += lineH;
+    };
+
+    drawLine("Residents: " + std::to_string(pb.residents) + " / " + std::to_string(cap), sf::Color::White);
+    drawLine("Power draw: " + std::to_string(power) + " kW");
+    if (powerShortage)
+        drawLine("NO POWER — building without electricity!", sf::Color(255, 60, 60));
+
+    std::string workLine = "Workplace: none";
+    if (pb.assignedWorkIdx >= 0 && im) {
+        const auto& inds = im->getPlaced();
+        if (pb.assignedWorkIdx < static_cast<int>(inds.size())) {
+            auto iit = im->getDisplayName(inds[pb.assignedWorkIdx].defId);
+            workLine = "Workplace: " + iit + " (commuters)";
+        }
+    }
+    drawLine(workLine);
+    if (pb.useBusCommute && pb.boardingStopX >= 0) {
+        if (pb.assignedWorkIdx >= 0 && im &&
+            pb.assignedWorkIdx < static_cast<int>(im->getPlaced().size()))
+            drawLine("Commute: Bus stop (" + std::to_string(pb.boardingStopX) + "," +
+                     std::to_string(pb.boardingStopY) + ") -> " +
+                     im->getDisplayName(im->getPlaced()[pb.assignedWorkIdx].defId),
+                     sf::Color(100, 220, 255));
+        else
+            drawLine("Commute: Bus stop (" + std::to_string(pb.boardingStopX) + "," +
+                     std::to_string(pb.boardingStopY) + ") — set factory at stop",
+                     sf::Color(100, 220, 255));
+    } else if (pb.assignedWorkIdx >= 0)
+        drawLine("Commute: Walk (within 20 road tiles)", sf::Color(120, 255, 120));
+    else
+        drawLine("Commute: none");
+
+    y += 6.f;
+    auto drawBtn = [&](const std::string& label, const std::string& id, float bw) {
+        sf::FloatRect rect({x, y}, {bw, 30.f});
+        bool hover = rect.contains(_detailMousePos);
+        sf::RectangleShape b({bw, 30.f});
+        b.setPosition({x, y});
+        b.setFillColor(hover ? sf::Color(240, 140, 30) : sf::Color(200, 100, 0));
+        w.draw(b);
+        sf::Text t(_font, label, BM_FONT_SIZE);
+        t.setFillColor(sf::Color::White);
+        t.setStyle(sf::Text::Style::Bold);
+        sf::FloatRect tb = t.getLocalBounds();
+        t.setOrigin({tb.position.x + tb.size.x / 2.f, tb.position.y + tb.size.y / 2.f});
+        t.setPosition({x + bw / 2.f, y + 15.f});
+        w.draw(t);
+        addDetailHit(x, y, bw, 30.f, id);
+        y += 36.f;
+    };
+
+    drawBtn("Assign destination (road <= 20)", "assign_work", BM_DETAIL_W - 28.f);
+    drawBtn("Clear assignment", "clear_work", BM_DETAIL_W - 28.f);
+
+    if (_pickingWorkplace && im) {
+        y += 4.f;
+        drawLine("--- Factories (green) / Bus stops (cyan) ---", sf::Color(255, 160, 30));
+        const auto& inds = im->getPlaced();
+        if (_reachableWorkIndices.empty() && _reachableBusStops.empty())
+            drawLine("Nothing reachable within 20 road tiles.", sf::Color(170, 170, 170));
+        for (int wi : _reachableWorkIndices) {
+            if (wi < 0 || wi >= static_cast<int>(inds.size())) continue;
+            std::string lbl = "[Factory] " + im->getDisplayName(inds[wi].defId);
+            drawBtn(lbl, "work_" + std::to_string(wi), BM_DETAIL_W - 28.f);
+        }
+        for (const auto& [sx, sy] : _reachableBusStops) {
+            char lbl[64];
+            std::snprintf(lbl, sizeof(lbl), "[Bus stop] %d, %d", sx, sy);
+            char id[48];
+            std::snprintf(id, sizeof(id), "stop_%d_%d", sx, sy);
+            drawBtn(lbl, id, BM_DETAIL_W - 28.f);
+        }
+    }
 }

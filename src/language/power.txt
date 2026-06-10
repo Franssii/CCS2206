@@ -1,0 +1,14 @@
+POWER (Energy)
+
+The net electrical power balance of your city, expressed in MW. This is production minus consumption.
+
+INCOME (green) - production:
+  - Power plants (coal, oil, etc.)
+  - Connected industrial facilities producing surplus
+
+EXPENSES (red) - consumption:
+  - Residential housing demand
+  - Industrial machinery
+  - Public infrastructure (street lighting, etc.)
+
+Tip: keep the power balance above 50 MW for safety. A negative value causes blackouts which halt production, lower loyalty and slow population growth.

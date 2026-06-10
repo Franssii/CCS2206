@@ -1,38 +1,29 @@
 #pragma once
+
 #include <string>
 #include <vector>
 #include <SFML/Graphics.hpp>
 
-
-struct BuildingDef {
+struct PowerDef {
     std::string id;
     std::string displayName;
     std::string description;
     int         cost = 0;
     std::string materials;
-
+    int         gridW = 1;
+    int         gridH = 1;
+    int         powerOutput = 0;
     std::vector<sf::Texture> textures;
-    sf::Texture iconTexture;
-
-    int gridW = 1;
-    int gridH = 1;
-    int capacity  = 10;
-    int powerDraw = 10;
 };
 
-struct PlacedBuilding {
+struct PlacedPower {
     std::string  defId;
     int          variantIdx;
     sf::Vector2f worldPos;
     int          gridX;
     int          gridY;
     sf::Sprite   sprite;
-    int          residents = 0;
-    int          assignedWorkIdx = -1;
-    int          boardingStopX = -1;
-    int          boardingStopY = -1;
-    bool         useBusCommute = false;
 
-    PlacedBuilding(const std::string& id, int vIdx, sf::Vector2f wPos, int gX, int gY, const sf::Texture& tex)
+    PlacedPower(const std::string& id, int vIdx, sf::Vector2f wPos, int gX, int gY, const sf::Texture& tex)
         : defId(id), variantIdx(vIdx), worldPos(wPos), gridX(gX), gridY(gY), sprite(tex) {}
 };

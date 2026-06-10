@@ -1,0 +1,44 @@
+# ============================================================
+# SETTINGS MENU LABELS
+# Format: key|value
+# Lines starting with # are comments. Empty lines are ignored.
+# Feel free to edit values - they will appear directly in the
+# in-game settings menu (gear icon). Do NOT rename the keys.
+# ============================================================
+
+title|GAME SETTINGS
+
+# ---- section headers ----
+audio_section|AUDIO
+display_section|DISPLAY
+keys_section|KEY BINDINGS
+
+# ---- audio rows ----
+music_volume|Music Volume
+sound_volume|Sound Volume
+
+# ---- display rows ----
+fullscreen|Display Mode
+fullscreen_on|Fullscreen
+fullscreen_off|Windowed
+
+# ---- key bindings rows ----
+key_camera_up|Camera Up
+key_camera_down|Camera Down
+key_camera_left|Camera Left
+key_camera_right|Camera Right
+key_place|Place / Confirm
+key_cycle|Cycle Variation
+key_save|Save Game
+key_quit|Quit to Menu
+key_cancel|Cancel
+
+# ---- bottom buttons ----
+btn_save|SAVE
+btn_reset|RESET
+btn_close|CLOSE
+
+# ---- misc ----
+version_label|Version
+hint_press_key|Press any key...
+hint_back|Press ESC to close

@@ -15,7 +15,7 @@ void GameManager::save(const std::vector<sf::Sprite>& block_1s) {
         saveFile1 << cash << std::endl;
         saveFile1 << loyalty << std::endl;
         saveFile1 << workers << std::endl;
-        saveFile1 << unemployment << std::endl;
+        saveFile1 << accommodation << std::endl;
         saveFile1 << sick << std::endl;
         saveFile1 << power << std::endl;
         saveFile1 << clock.getMin() << std::endl;
@@ -40,12 +40,17 @@ void GameManager::restart(std::vector<sf::Sprite>& block_1s) {
     cash = 1000000;
     loyalty = 75;
     workers = 0;
-    unemployment = 0;
+    accommodation = 0;
     sick = 0;
     power = 0;
     option_marked_position = 0;
     option_marked_position_2 = 0;
     xt1 = 0;
+
+    loanRemaining = 0;
+    loanMonthlyPayment = 0;
+    loanMonthsLeft = 0;
+    loanInterestRate = 0.f;
 
     clock.setTime(1, 10, 26, 4, 1967);
     block_1s.clear();
@@ -59,7 +64,7 @@ void GameManager::load(std::vector<sf::Sprite>& block_1s, const sf::Texture& blo
         block_1s.clear();
 
         int m, h, d, mo, y;
-        loadFile1 >> population >> cash >> loyalty >> workers >> unemployment >> sick >> power
+        loadFile1 >> population >> cash >> loyalty >> workers >> accommodation >> sick >> power
                   >> m >> h >> d >> mo >> y;
         clock.setTime(m, h, d, mo, y);
 

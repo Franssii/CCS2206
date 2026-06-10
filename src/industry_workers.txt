@@ -1,0 +1,7 @@
+# id | maxWorkers | product | outputPerWorker (per active worker per day)
+# Bus_stop passenger capacity is the 4th field when product=passengers
+Mine|500|coal|1
+Saw_mill|50|planks|2
+Magazine_1|0|storage|0
+Magazine_open|0|storage|0
+Bus_stop|0|passengers|200

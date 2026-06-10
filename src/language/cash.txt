@@ -1,0 +1,16 @@
+CASH (Treasury)
+
+The total amount of money currently held by your city's treasury, expressed in dollars ($). Cash is your main resource for development - every road, building and factory has to be paid for from here.
+
+INCOME (green) comes from:
+  - Taxes paid by the employed citizens
+  - Industrial production and exports
+  - Loans granted by the central bank
+
+EXPENSES (red) come from:
+  - Constructing buildings, roads and factories
+  - Maintenance costs of existing infrastructure
+  - Unemployment and social benefits
+  - Monthly loan repayments
+
+Tip: keep cash above 10,000$ to ensure stable operations and avoid bankruptcy. If the treasury runs out, construction is blocked until new revenue arrives.

@@ -1,0 +1,15 @@
+SICK (Health)
+
+The number of citizens currently incapacitated by illness. A lower value is always better - sick citizens cannot work, lower loyalty and may die.
+
+GREEN line - recoveries:
+  - Citizens healing naturally
+  - Hospitals treating patients
+  - Pollution reduction improving public health
+
+RED line - new cases:
+  - Pollution from heavy industry
+  - Lack of healthcare infrastructure
+  - Overcrowded residential areas
+
+Tip: a high sick count cripples the workforce, lowers loyalty and increases deaths. Build hospitals and limit polluting industries to keep this number low.

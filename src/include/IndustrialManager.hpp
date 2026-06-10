@@ -7,9 +7,14 @@
 #include <functional>
 #include "IndustrialDef.hpp"
 #include "WorldGen.hpp"
+#include "DetailPanelUtil.hpp"
+
+class IndustryWorkers;
 
 constexpr float IM_WIN_W        = 605.f;
 constexpr float IM_WIN_H        = 470.f;
+constexpr float IM_DETAIL_W     = 420.f;
+constexpr float IM_DETAIL_MIN_H = 200.f;
 
 constexpr float IM_TITLEBAR_H   = 32.f;
 constexpr float IM_LIST_W       = 245.f;
@@ -73,8 +78,20 @@ public:
 
     const std::vector<PlacedIndustrial>& getPlaced() const { return _placed; }
 
+    bool findAt(int gx, int gy, int& outIdx) const;
+    void getGridSize(const std::string& defId, int& outW, int& outH) const;
+    std::string getDisplayName(const std::string& defId) const;
+
+    bool isDetailOpen() const { return _detailOpen; }
+    bool tryOpenDetailAtWorld(sf::Vector2f worldPos, float stepX, float stepY,
+                              sf::RenderWindow& window, const sf::View& gameView);
+    void closeDetail();
+    bool handleDetailEvent(const sf::Event& event, sf::RenderWindow& window);
+    void drawDetailPanel(sf::RenderWindow& w, const BuildingManager* bm,
+                         const IndustryWorkers* iw, bool powerShortage = false);
+
     bool removeAt(int gx, int gy);
-    void clear() { _placed.clear(); }
+    void clear();
     bool hasCollision(int gx, int gy, int w, int h) const;
 
     static sf::Vector2f gridToWorld(int gx, int gy, float stepX, float stepY);
@@ -86,6 +103,11 @@ private:
     std::vector<PlacedIndustrial>     _placed;
 
     bool  _open    = false;
+    bool  _detailOpen = false;
+    int   _detailIdx = -1;
+    sf::Vector2f _detailPos;
+    float        _detailH = IM_DETAIL_MIN_H;
+    sf::FloatRect _detailCloseRect;
     IndPlacingState _placingState = IndPlacingState::NONE;
     int   _selDef  = -1;
     int   _selVar  = -1;

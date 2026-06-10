@@ -46,7 +46,10 @@ void DemolitionManager::update(sf::Vector2f worldMousePos, float stepX, float st
     _demolishSprite.setPosition(worldMousePos);
 }
 
-bool DemolitionManager::handleWorldClick(sf::Vector2f worldPos, float stepX, float stepY, BuildingManager* bm, RoadManager* rm, IndustrialManager* im, GeneratedWorld* world) {
+bool DemolitionManager::handleWorldClick(sf::Vector2f worldPos, float stepX, float stepY,
+                                         BuildingManager* bm, RoadManager* rm,
+                                         IndustrialManager* im, PowerManager* pm,
+                                         GeneratedWorld* world) {
     if (!_active) return false;
 
     sf::Vector2i g = BuildingManager::worldToGrid(worldPos, stepX, stepY);
@@ -56,6 +59,7 @@ bool DemolitionManager::handleWorldClick(sf::Vector2f worldPos, float stepX, flo
     if (bm && bm->removeAt(g.x, g.y)) removed = true;
     else if (rm && rm->removeAt(g.x, g.y)) removed = true;
     else if (im && im->removeAt(g.x, g.y)) removed = true;
+    else if (pm && pm->removeAt(g.x, g.y)) removed = true;
     else if (world && world->get(g.x, g.y) == TileType::TREE) {
         world->tiles[g.y][g.x] = TileType::BARE;
         removed = true;

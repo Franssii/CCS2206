@@ -134,9 +134,10 @@ public:
     long long cash = 1000000;
     int loyalty = 75;
     int workers = 0;
-    int unemployment = 0;
+    int accommodation = 0;
     int sick = 0;
     int power = 0;
+    bool powerShortage = false;
 
     int steel = 0;
     int concrete = 0;
@@ -144,6 +145,11 @@ public:
     int option_marked_position = 0;
     int option_marked_position_2 = 0;
     int xt1 = 0;
+
+    long long loanRemaining     = 0;
+    long long loanMonthlyPayment = 0;
+    int       loanMonthsLeft    = 0;
+    float     loanInterestRate  = 0.f;
 
     GameTime clock;
 };

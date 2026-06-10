@@ -1,0 +1,14 @@
+POPULATION (Pops)
+
+The total number of citizens currently living in your city. Population is the source of taxes, workforce and political support.
+
+INCOME (green) - new citizens come from:
+  - Births among existing population
+  - Immigration when loyalty is high (>70%)
+  - Workers attracted by job opportunities
+
+EXPENSES (red) - citizens are lost to:
+  - Natural deaths (especially among the sick)
+  - Emigration when loyalty is low or jobs are scarce
+
+Tip: population growth requires housing - build more residential blocks to accommodate newcomers, otherwise immigration stalls.

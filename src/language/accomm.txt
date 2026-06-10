@@ -1,0 +1,15 @@
+ACCOMMODATION (Accomm)
+
+The number of citizens currently housed in residential buildings. Everyone else is homeless and vulnerable to emigration, sickness and loyalty loss.
+
+GREEN line - newly housed:
+  - Citizens moving into newly built homes
+  - Population growth covered by housing expansion
+  - Immigration when enough beds are available
+
+RED line - homeless:
+  - Citizens without a roof when population exceeds housing capacity
+  - Homeless people may emigrate or fall ill more easily
+  - Build more residential blocks to reduce this number
+
+Tip: keep accommodation close to population. A large homeless population drains loyalty and slows city growth.

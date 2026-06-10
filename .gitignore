@@ -1,0 +1,10 @@
+*.obj
+*.exe
+*.ilk
+*.pdb
+src/.vscode/
+src/saves/
+*.save
+*.tmp
+*.bak
+

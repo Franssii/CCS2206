@@ -4,6 +4,7 @@
 #include <memory>
 #include <vector>
 #include <string>
+#include <map>
 #include "GameManager.hpp"
 #include "AssetManager.hpp"
 #include "MapRenderer.hpp"
@@ -14,6 +15,12 @@
 #include "WorldGen.hpp"
 #include "WorldGenMenu.hpp"
 #include "IndustrialManager.hpp"
+#include "PowerManager.hpp"
+#include "SettingsManager.hpp"
+#include "StatsManager.hpp"
+#include "IndustryWorkers.hpp"
+#include "CitizenManager.hpp"
+#include "VehicleManager.hpp"
 
 constexpr float UI_STATBOX_Y        = 12.f;
 constexpr float UI_STATBOX_X_START  = 328.f;
@@ -39,6 +46,12 @@ struct StatBox {
     sf::Color defaultColor;
 };
 
+struct StatThreshold {
+    std::string direction = "high"; // "high" or "low"
+    long long   green     = 0;
+    long long   orange    = 0;
+};
+
 class Game {
 public:
     Game();
@@ -55,6 +68,8 @@ private:
     void initBuildings();
     void initRoads();
     void initIndustrial();
+    void initPower();
+    void initCitizens();
 
     void startNewGame(const WorldSettings& settings);
     void saveGame();
@@ -71,9 +86,24 @@ private:
     std::unique_ptr<RoadManager>       roadManager;
     std::unique_ptr<DemolitionManager> demolitionManager;
     std::unique_ptr<IndustrialManager> industrialManager;
+    std::unique_ptr<PowerManager>      powerManager;
     std::unique_ptr<WorldGenMenu>      worldGenMenu;
+    std::unique_ptr<SettingsManager>   settingsManager;
+    std::unique_ptr<StatsManager>      statsManager;
+    IndustryWorkers                    industryWorkers;
+    std::unique_ptr<CitizenManager>    citizenManager;
+    std::unique_ptr<VehicleManager>    vehicleManager;
     GameManager gameManager;
     UIManager   uiManager;
+
+    std::map<std::string, StatThreshold> statThresholds;
+    void loadVariables(const std::string& path);
+    sf::Color colorForStat(const std::string& key, long long value) const;
+    void tickEconomy();
+
+    void applyAudioSettings();
+    void applyDisplayMode();
+    void playClick();
 
     WorldGenerator  worldGenerator;
     GeneratedWorld  currentWorld;

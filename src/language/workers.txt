@@ -1,0 +1,15 @@
+WORKERS
+
+The number of citizens currently employed in industrial buildings, factories and city services. Workers drive industrial output and tax revenue.
+
+INCOME (green) - new workers come from:
+  - Newly built factories and workplaces
+  - Population growth providing more workforce
+  - Returning emigrants when loyalty improves
+
+EXPENSES (red) - workers are lost to:
+  - Demolished or shut-down factories
+  - Sickness and old age
+  - Emigration
+
+Tip: balance the worker count with available jobs. Too many idle workers means unemployment rises; too few workers cripples industry.

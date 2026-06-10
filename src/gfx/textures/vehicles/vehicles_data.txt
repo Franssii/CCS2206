@@ -1,0 +1,2 @@
+# id | displayName | description | cost | passengerCapacity
+Bus_1|City Bus|Commuter bus for stop-to-stop routes. Faster than walking.|10000|150

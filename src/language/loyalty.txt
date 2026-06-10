@@ -1,0 +1,17 @@
+LOYALTY
+
+The political support of your population for the administration, measured in %. Determines immigration, productivity and social stability.
+
+INCOME (green) - loyalty rises when:
+  - Citizens have stable employment
+  - Public services are well funded
+  - The economy is growing
+  - Healthcare keeps the sick count low
+
+EXPENSES (red) - loyalty falls when:
+  - Unemployment is high
+  - Many citizens are sick
+  - The treasury runs into heavy debt
+  - Power blackouts disrupt daily life
+
+Tip: keep loyalty above 70% to attract immigrants and avoid political crisis. Below 40% emigration begins and unrest may break out.

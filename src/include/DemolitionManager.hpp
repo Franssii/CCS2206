@@ -5,6 +5,7 @@
 #include "BuildingManager.hpp"
 #include "RoadManager.hpp"
 #include "IndustrialManager.hpp"
+#include "PowerManager.hpp"
 #include "WorldGen.hpp"
 
 struct ExplosionAnim {
@@ -22,7 +23,9 @@ public:
     void setActive(bool active) { _active = active; }
 
     void update(sf::Vector2f worldMousePos, float stepX, float stepY);
-    bool handleWorldClick(sf::Vector2f worldPos, float stepX, float stepY, BuildingManager* bm, RoadManager* rm, IndustrialManager* im, GeneratedWorld* world = nullptr);
+    bool handleWorldClick(sf::Vector2f worldPos, float stepX, float stepY, BuildingManager* bm,
+                          RoadManager* rm, IndustrialManager* im, PowerManager* pm,
+                          GeneratedWorld* world = nullptr);
 
     void drawWorldOverlay(sf::RenderWindow& window, float stepX, float stepY);
     void drawAnimations(sf::RenderWindow& window);

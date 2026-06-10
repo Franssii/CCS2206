@@ -1,6 +1,8 @@
 #include "include/IndustrialManager.hpp"
+#include "include/DetailPanelUtil.hpp"
 #include "include/RoadManager.hpp"
 #include "include/BuildingManager.hpp"
+#include "include/IndustryWorkers.hpp"
 #include <fstream>
 #include <sstream>
 #include <cmath>
@@ -47,6 +49,7 @@ IndustrialManager::IndustrialManager(const sf::Font& font,
       _hlSprite(hlTexture),
       _ghostSprite(hlTexture)
 {
+    scaleCloseSprite(_closeBtn, closeTexture);
 }
 
 void IndustrialManager::loadBuildings(const std::string& dataFilePath,
@@ -81,7 +84,7 @@ void IndustrialManager::loadBuildings(const std::string& dataFilePath,
         def.cost        = std::stoi(imTrim(parts[3]));
         def.materials   = imTrim(parts[4]);
 
-        // grid size from optional columns 5 and 6
+
         def.gridW = 1;
         def.gridH = 1;
         if (parts.size() >= 7) {
@@ -770,4 +773,147 @@ void IndustrialManager::drawWorldOverlay(sf::RenderWindow& w, float stepX, float
         }
         w.draw(_ghostSprite);
     }
+}
+
+void IndustrialManager::clear() {
+    _placed.clear();
+    closeDetail();
+}
+
+bool IndustrialManager::findAt(int gx, int gy, int& outIdx) const {
+    for (size_t i = 0; i < _placed.size(); ++i) {
+        const auto& pi = _placed[i];
+        int pw = 1, ph = 1;
+        getGridSize(pi.defId, pw, ph);
+        if (gx >= pi.gridX && gx < pi.gridX + pw &&
+            gy >= pi.gridY && gy < pi.gridY + ph) {
+            outIdx = static_cast<int>(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+void IndustrialManager::getGridSize(const std::string& defId, int& outW, int& outH) const {
+    outW = 1; outH = 1;
+    auto it = _defIndex.find(defId);
+    if (it != _defIndex.end()) {
+        outW = _defs[it->second].gridW;
+        outH = _defs[it->second].gridH;
+    }
+}
+
+std::string IndustrialManager::getDisplayName(const std::string& defId) const {
+    auto it = _defIndex.find(defId);
+    if (it == _defIndex.end()) return defId;
+    return _defs[it->second].displayName;
+}
+
+bool IndustrialManager::tryOpenDetailAtWorld(sf::Vector2f worldPos, float stepX, float stepY,
+                                             sf::RenderWindow& window, const sf::View& gameView)
+{
+    sf::Vector2i g = worldToGrid(worldPos, stepX, stepY);
+    int idx = -1;
+    if (!findAt(g.x, g.y, idx)) return false;
+    _detailOpen = true;
+    _detailIdx = idx;
+    _detailH = IM_DETAIL_MIN_H;
+    _detailPos = panelPosBesideBuilding(_placed[idx].worldPos, window, gameView,
+                                        IM_DETAIL_W, _detailH);
+    _detailCloseRect = detailCloseRect(_detailPos, IM_DETAIL_W, IM_TITLEBAR_H);
+    return true;
+}
+
+void IndustrialManager::closeDetail() {
+    _detailOpen = false;
+    _detailIdx = -1;
+}
+
+bool IndustrialManager::handleDetailEvent(const sf::Event& event, sf::RenderWindow& window) {
+    if (!_detailOpen) return false;
+    sf::Vector2f mp = window.mapPixelToCoords(sf::Mouse::getPosition(window), window.getDefaultView());
+
+    if (const auto* kp = event.getIf<sf::Event::KeyPressed>()) {
+        if (kp->code == sf::Keyboard::Key::Escape) {
+            closeDetail();
+            return true;
+        }
+        return false;
+    }
+
+    if (const auto* mb = event.getIf<sf::Event::MouseButtonPressed>()) {
+        if (mb->button == sf::Mouse::Button::Left &&
+            _detailCloseRect.contains(mp)) {
+            closeDetail();
+            return true;
+        }
+    }
+    return _detailOpen;
+}
+
+void IndustrialManager::drawDetailPanel(sf::RenderWindow& w, const BuildingManager* bm,
+                                        const IndustryWorkers* iw, bool powerShortage)
+{
+    if (!_detailOpen || _detailIdx < 0) return;
+
+    const PlacedIndustrial& pi = _placed[_detailIdx];
+    std::string name = getDisplayName(pi.defId);
+
+    sf::RectangleShape bg({IM_DETAIL_W, _detailH});
+    bg.setPosition(_detailPos);
+    bg.setFillColor(sf::Color(10, 10, 10, 245));
+    bg.setOutlineColor(sf::Color::White);
+    bg.setOutlineThickness(3.f);
+    w.draw(bg);
+
+    sf::RectangleShape tb({IM_DETAIL_W, IM_TITLEBAR_H});
+    tb.setPosition(_detailPos);
+    tb.setFillColor(sf::Color(200, 100, 0));
+    w.draw(tb);
+
+    sf::Text title(_font, "WORKPLACE - " + name, IM_FONT_SIZE + 2);
+    title.setFillColor(sf::Color::White);
+    title.setStyle(sf::Text::Style::Bold);
+    title.setPosition({_detailPos.x + 10.f, _detailPos.y + 6.f});
+    w.draw(title);
+    drawDetailCloseButton(w, _closeBtn, _detailPos, IM_DETAIL_W, IM_TITLEBAR_H, _detailCloseRect);
+
+    int assigned = 0;
+    if (bm) {
+        for (const auto& h : bm->getPlaced()) {
+            if (h.assignedWorkIdx == _detailIdx)
+                assigned += h.residents;
+        }
+    }
+
+    int maxW = iw ? iw->maxWorkersFor(pi.defId) : 0;
+    int output = 0;
+    if (iw) {
+        if (const auto* def = iw->find(pi.defId))
+            output = assigned * def->outputPerWorker;
+    }
+
+    float x = _detailPos.x + 14.f;
+    float y = _detailPos.y + IM_TITLEBAR_H + 14.f;
+    float lineH = static_cast<float>(IM_FONT_SIZE) + 8.f;
+
+    auto drawLine = [&](const std::string& txt, sf::Color col = sf::Color(220, 220, 220)) {
+        sf::Text t(_font, txt, IM_FONT_SIZE);
+        t.setFillColor(col);
+        t.setPosition({x, y});
+        w.draw(t);
+        y += lineH;
+    };
+
+    drawLine("Commuters today: " + std::to_string(assigned) +
+             (maxW > 0 ? " / " + std::to_string(maxW) : ""));
+    if (iw && iw->find(pi.defId)) {
+        const auto* def = iw->find(pi.defId);
+        drawLine("Product: " + def->product);
+        drawLine("Daily output: " + std::to_string(output));
+    }
+    if (powerShortage)
+        drawLine("NO POWER — factory idle without electricity!", sf::Color(255, 60, 60));
+    drawLine("Citizens arrive for work and return home.");
+    drawLine("Assign workers from residential buildings.");
 }

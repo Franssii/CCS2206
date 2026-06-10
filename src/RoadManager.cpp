@@ -1,7 +1,13 @@
 #include "include/RoadManager.hpp"
 #include "include/BuildingManager.hpp"
+#include "include/IndustrialManager.hpp"
+#include "include/CitizenManager.hpp"
+#include "include/IndustryWorkers.hpp"
+#include "include/DetailPanelUtil.hpp"
 #include <fstream>
 #include <sstream>
+#include <map>
+#include <cstring>
 #include <cmath>
 #include <algorithm>
 #include <filesystem>
@@ -45,6 +51,7 @@ RoadManager::RoadManager(const sf::Font& font,
       _hlSprite(hlTexture),
       _ghostSprite(hlTexture)
 {
+    scaleCloseSprite(_closeBtn, closeTexture);
 }
 
 void RoadManager::loadRoads(const std::string& dataFilePath,
@@ -734,5 +741,516 @@ void RoadManager::drawWorldOverlay(sf::RenderWindow& w, float stepX, float stepY
         _hlSprite.setScale({(stepX * 2.f) / hlTexW, (stepY * 2.f) / hlTexH});
         w.draw(_hlSprite);
         w.draw(_ghostSprite);
+    }
+}
+
+namespace {
+
+const int kNeighborDx[] = { 1, -1, 0, 0 };
+const int kNeighborDy[] = { 0, 0, 1, -1 };
+
+bool industrialTouchesRoadSet(int gx, int gy, int w, int h,
+                              const std::map<std::pair<int,int>, int>& dist)
+{
+    for (int y = gy; y < gy + h; ++y) {
+        for (int x = gx; x < gx + w; ++x) {
+            for (int n = 0; n < 4; ++n) {
+                int nx = x + kNeighborDx[n];
+                int ny = y + kNeighborDy[n];
+                if (dist.count({nx, ny})) return true;
+            }
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+bool RoadManager::isRoadAt(int gx, int gy) const {
+    for (const auto& pr : _placed) {
+        if (pr.gridX == gx && pr.gridY == gy) return true;
+    }
+    return false;
+}
+
+bool RoadManager::getRoadDefIdAt(int gx, int gy, std::string& outDefId) const {
+    for (const auto& pr : _placed) {
+        if (pr.gridX == gx && pr.gridY == gy) {
+            outDefId = pr.defId;
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool roadIdEquals(const std::string& id, const char* target) {
+    if (id.size() != std::strlen(target)) return false;
+    for (size_t i = 0; i < id.size(); ++i) {
+        if (std::tolower(static_cast<unsigned char>(id[i])) !=
+            std::tolower(static_cast<unsigned char>(target[i])))
+            return false;
+    }
+    return true;
+}
+
+bool RoadManager::isBusStopAt(int gx, int gy) const {
+    std::string id;
+    return getRoadDefIdAt(gx, gy, id) && roadIdEquals(id, "Bus_stop");
+}
+
+bool RoadManager::isVehicleStationAt(int gx, int gy) const {
+    std::string id;
+    return getRoadDefIdAt(gx, gy, id) && roadIdEquals(id, "Vehicle_station");
+}
+
+bool RoadManager::findBusStopAt(int gx, int gy, int& outX, int& outY) const {
+    if (isBusStopAt(gx, gy)) {
+        outX = gx;
+        outY = gy;
+        return true;
+    }
+    for (int n = 0; n < 4; ++n) {
+        int nx = gx + kNeighborDx[n];
+        int ny = gy + kNeighborDy[n];
+        if (isBusStopAt(nx, ny)) {
+            outX = nx;
+            outY = ny;
+            return true;
+        }
+    }
+    return false;
+}
+
+std::vector<std::pair<int,int>> RoadManager::findRoadPath(int fromX, int fromY,
+                                                          int toX, int toY,
+                                                          int maxSteps) const
+{
+    std::vector<std::pair<int,int>> result;
+    if (!isRoadAt(fromX, fromY) || !isRoadAt(toX, toY)) return result;
+    if (fromX == toX && fromY == toY) return {{fromX, fromY}};
+
+    std::map<std::pair<int,int>, int> dist;
+    std::map<std::pair<int,int>, std::pair<int,int>> parent;
+    std::vector<std::pair<int,int>> queue;
+
+    dist[{fromX, fromY}] = 0;
+    parent[{fromX, fromY}] = {fromX, fromY};
+    queue.push_back({fromX, fromY});
+
+    for (size_t qi = 0; qi < queue.size(); ++qi) {
+        auto [cx, cy] = queue[qi];
+        int d = dist[{cx, cy}];
+        if (cx == toX && cy == toY) break;
+        if (d >= maxSteps) continue;
+
+        for (int n = 0; n < 4; ++n) {
+            int nx = cx + kNeighborDx[n];
+            int ny = cy + kNeighborDy[n];
+            if (!isRoadAt(nx, ny)) continue;
+            if (dist.count({nx, ny})) continue;
+            dist[{nx, ny}] = d + 1;
+            parent[{nx, ny}] = {cx, cy};
+            queue.push_back({nx, ny});
+        }
+    }
+
+    if (!dist.count({toX, toY})) return result;
+
+    for (auto cur = std::make_pair(toX, toY); ; ) {
+        result.push_back(cur);
+        auto par = parent[cur];
+        if (par.first == cur.first && par.second == cur.second) break;
+        cur = par;
+    }
+    std::reverse(result.begin(), result.end());
+    return result;
+}
+
+bool RoadManager::hasRoadAdjacentToRect(int gx, int gy, int w, int h) const {
+    for (int y = gy; y < gy + h; ++y) {
+        for (int x = gx; x < gx + w; ++x) {
+            for (int n = 0; n < 4; ++n) {
+                if (isRoadAt(x + kNeighborDx[n], y + kNeighborDy[n])) return true;
+            }
+        }
+    }
+    return false;
+}
+
+std::vector<int> RoadManager::findReachableIndustrialIndices(int houseGx, int houseGy,
+                                                             int houseW, int houseH,
+                                                             const IndustrialManager& im,
+                                                             int maxSteps) const
+{
+    std::vector<int> result;
+    if (houseW < 1) houseW = 1;
+    if (houseH < 1) houseH = 1;
+
+    if (!hasRoadAdjacentToRect(houseGx, houseGy, houseW, houseH))
+        return result;
+
+    std::map<std::pair<int,int>, int> dist;
+    std::vector<std::pair<int,int>> queue;
+
+    for (int y = houseGy; y < houseGy + houseH; ++y) {
+        for (int x = houseGx; x < houseGx + houseW; ++x) {
+            for (int n = 0; n < 4; ++n) {
+                int rx = x + kNeighborDx[n];
+                int ry = y + kNeighborDy[n];
+                if (!isRoadAt(rx, ry)) continue;
+                if (dist.count({rx, ry})) continue;
+                dist[{rx, ry}] = 0;
+                queue.push_back({rx, ry});
+            }
+        }
+    }
+
+    if (queue.empty()) return result;
+
+    for (size_t qi = 0; qi < queue.size(); ++qi) {
+        auto [cx, cy] = queue[qi];
+        int d = dist[{cx, cy}];
+        if (d >= maxSteps) continue;
+
+        for (int n = 0; n < 4; ++n) {
+            int nx = cx + kNeighborDx[n];
+            int ny = cy + kNeighborDy[n];
+            if (!isRoadAt(nx, ny)) continue;
+            if (dist.count({nx, ny})) continue;
+            dist[{nx, ny}] = d + 1;
+            queue.push_back({nx, ny});
+        }
+    }
+
+    const auto& placed = im.getPlaced();
+    for (size_t i = 0; i < placed.size(); ++i) {
+        const auto& ind = placed[i];
+        int iw = 1, ih = 1;
+        im.getGridSize(ind.defId, iw, ih);
+        if (industrialTouchesRoadSet(ind.gridX, ind.gridY, iw, ih, dist))
+            result.push_back(static_cast<int>(i));
+    }
+    return result;
+}
+
+void RoadManager::drawWorkplaceHighlights(sf::RenderWindow& w, float stepX, float stepY,
+                                          const IndustrialManager& im)
+{
+    if (_highlightIndIndices.empty()) return;
+
+    float hlTexW = static_cast<float>(_hlTexture.getSize().x);
+    float hlTexH = static_cast<float>(_hlTexture.getSize().y);
+    _hlSprite.setOrigin({hlTexW / 2.f, 0.f});
+    _hlSprite.setScale({(stepX * 2.f) / hlTexW, (stepY * 2.f) / hlTexH});
+    _hlSprite.setColor(sf::Color(0, 255, 0, 200));
+
+    const auto& placed = im.getPlaced();
+    for (int idx : _highlightIndIndices) {
+        if (idx < 0 || idx >= static_cast<int>(placed.size())) continue;
+        const auto& ind = placed[idx];
+        int iw = 1, ih = 1;
+        im.getGridSize(ind.defId, iw, ih);
+        for (int dy = 0; dy < ih; ++dy) {
+            for (int dx = 0; dx < iw; ++dx) {
+                sf::Vector2f tPos = gridToWorld(ind.gridX + dx, ind.gridY + dy, stepX, stepY);
+                _hlSprite.setPosition(tPos);
+                w.draw(_hlSprite);
+            }
+        }
+    }
+}
+
+std::vector<std::pair<int,int>> RoadManager::findReachableBusStops(int houseGx, int houseGy,
+                                                                    int houseW, int houseH,
+                                                                    int maxSteps) const
+{
+    std::vector<std::pair<int,int>> result;
+    if (houseW < 1) houseW = 1;
+    if (houseH < 1) houseH = 1;
+    if (!hasRoadAdjacentToRect(houseGx, houseGy, houseW, houseH))
+        return result;
+
+    std::map<std::pair<int,int>, int> dist;
+    std::vector<std::pair<int,int>> queue;
+
+    for (int y = houseGy; y < houseGy + houseH; ++y) {
+        for (int x = houseGx; x < houseGx + houseW; ++x) {
+            for (int n = 0; n < 4; ++n) {
+                int rx = x + kNeighborDx[n];
+                int ry = y + kNeighborDy[n];
+                if (!isRoadAt(rx, ry)) continue;
+                if (dist.count({rx, ry})) continue;
+                dist[{rx, ry}] = 0;
+                queue.push_back({rx, ry});
+            }
+        }
+    }
+    if (queue.empty()) return result;
+
+    for (size_t qi = 0; qi < queue.size(); ++qi) {
+        auto [cx, cy] = queue[qi];
+        int d = dist[{cx, cy}];
+        if (d >= maxSteps) continue;
+
+        if (isBusStopAt(cx, cy))
+            result.push_back({cx, cy});
+
+        for (int n = 0; n < 4; ++n) {
+            int nx = cx + kNeighborDx[n];
+            int ny = cy + kNeighborDy[n];
+            if (!isRoadAt(nx, ny)) continue;
+            if (dist.count({nx, ny})) continue;
+            dist[{nx, ny}] = d + 1;
+            queue.push_back({nx, ny});
+        }
+    }
+    return result;
+}
+
+void RoadManager::drawBusStopHighlights(sf::RenderWindow& w, float stepX, float stepY) {
+    if (!_highlightBusStops && _highlightAssignBusStops.empty()) return;
+
+    float hlTexW = static_cast<float>(_hlTexture.getSize().x);
+    float hlTexH = static_cast<float>(_hlTexture.getSize().y);
+    _hlSprite.setOrigin({hlTexW / 2.f, 0.f});
+    _hlSprite.setScale({(stepX * 2.f) / hlTexW, (stepY * 2.f) / hlTexH});
+    _hlSprite.setColor(sf::Color(0, 255, 0, 200));
+
+    if (_highlightBusStops) {
+        for (const auto& pr : _placed) {
+            if (!isBusStopAt(pr.gridX, pr.gridY)) continue;
+            sf::Vector2f tPos = gridToWorld(pr.gridX, pr.gridY, stepX, stepY);
+            _hlSprite.setPosition(tPos);
+            w.draw(_hlSprite);
+        }
+    }
+
+    if (!_highlightAssignBusStops.empty()) {
+        _hlSprite.setColor(sf::Color(0, 180, 255, 200));
+        for (const auto& [bx, by] : _highlightAssignBusStops) {
+            sf::Vector2f tPos = gridToWorld(bx, by, stepX, stepY);
+            _hlSprite.setPosition(tPos);
+            w.draw(_hlSprite);
+        }
+        _hlSprite.setColor(sf::Color(0, 255, 0, 200));
+    }
+}
+
+bool RoadManager::findNearestBusStop(int gx, int gy, int w, int h,
+                                     int& outX, int& outY, int maxSteps) const
+{
+    outX = outY = -1;
+    if (!hasRoadAdjacentToRect(gx, gy, w, h)) return false;
+
+    std::map<std::pair<int,int>, int> dist;
+    std::vector<std::pair<int,int>> queue;
+
+    for (int y = gy; y < gy + h; ++y) {
+        for (int x = gx; x < gx + w; ++x) {
+            for (int n = 0; n < 4; ++n) {
+                int rx = x + kNeighborDx[n];
+                int ry = y + kNeighborDy[n];
+                if (!isRoadAt(rx, ry)) continue;
+                if (dist.count({rx, ry})) continue;
+                dist[{rx, ry}] = 0;
+                queue.push_back({rx, ry});
+            }
+        }
+    }
+    if (queue.empty()) return false;
+
+    int bestDist = maxSteps + 1;
+    for (size_t qi = 0; qi < queue.size(); ++qi) {
+        auto [cx, cy] = queue[qi];
+        int d = dist[{cx, cy}];
+        if (d >= maxSteps) continue;
+
+        if (isBusStopAt(cx, cy) && d < bestDist) {
+            bestDist = d;
+            outX = cx;
+            outY = cy;
+        }
+
+        for (int n = 0; n < 4; ++n) {
+            int nx = cx + kNeighborDx[n];
+            int ny = cy + kNeighborDy[n];
+            if (!isRoadAt(nx, ny)) continue;
+            if (dist.count({nx, ny})) continue;
+            dist[{nx, ny}] = d + 1;
+            queue.push_back({nx, ny});
+        }
+    }
+    return outX >= 0;
+}
+
+bool RoadManager::tryOpenStopDetailAtWorld(sf::Vector2f worldPos, float stepX, float stepY,
+                                           sf::RenderWindow& window, const sf::View& gameView)
+{
+    sf::Vector2i g = worldToGrid(worldPos, stepX, stepY);
+    int stopX = 0, stopY = 0;
+    if (!findBusStopAt(g.x, g.y, stopX, stopY)) return false;
+
+    _stopDetailOpen = true;
+    _stopDetailGX = stopX;
+    _stopDetailGY = stopY;
+    sf::Vector2f world = gridToWorld(stopX, stopY, stepX, stepY);
+    _stopDetailH = RM_STOP_DETAIL_MIN_H;
+    _stopDetailPos = panelPosBesideBuilding(world, window, gameView,
+                                           RM_STOP_DETAIL_W, _stopDetailH);
+    _stopDetailCloseRect = detailCloseRect(_stopDetailPos, RM_STOP_DETAIL_W, RM_TITLEBAR_H);
+    return true;
+}
+
+float RoadManager::computeStopDetailHeight(const IndustrialManager* im,
+                                           const IndustryWorkers* iw) const {
+    float lineH = static_cast<float>(RM_FONT_SIZE) + 10.f;
+    float h = RM_TITLEBAR_H + 14.f + 5.f * lineH + 10.f;
+    if (im && iw) {
+        auto reachable = const_cast<RoadManager*>(this)->findReachableIndustrialIndices(
+            _stopDetailGX, _stopDetailGY, 1, 1, *im, 20);
+        int btnCount = 0;
+        for (int idx : reachable) {
+            if (idx >= 0 && idx < static_cast<int>(im->getPlaced().size())) {
+                const auto& ind = im->getPlaced()[idx];
+                if (iw->maxWorkersFor(ind.defId) > 0) ++btnCount;
+            }
+        }
+        h += static_cast<float>(btnCount) * 36.f;
+    }
+    return std::max(RM_STOP_DETAIL_MIN_H, h);
+}
+
+void RoadManager::closeStopDetail() {
+    _stopDetailOpen = false;
+}
+
+bool RoadManager::handleStopDetailEvent(const sf::Event& event, sf::RenderWindow& window,
+                                        CitizenManager* cm, const IndustrialManager* im,
+                                        const IndustryWorkers* iw, BuildingManager* bm) {
+    if (!_stopDetailOpen) return false;
+    _stopDetailMousePos = window.mapPixelToCoords(sf::Mouse::getPosition(window),
+                                                   window.getDefaultView());
+
+    if (const auto* kp = event.getIf<sf::Event::KeyPressed>()) {
+        if (kp->code == sf::Keyboard::Key::Escape) {
+            closeStopDetail();
+            return true;
+        }
+        return false;
+    }
+
+    if (const auto* mb = event.getIf<sf::Event::MouseButtonPressed>()) {
+        if (mb->button == sf::Mouse::Button::Left) {
+            if (_stopDetailCloseRect.contains(_stopDetailMousePos)) {
+                closeStopDetail();
+                return true;
+            }
+            for (const auto& [rect, id] : _stopDetailHits) {
+                if (!rect.contains(_stopDetailMousePos)) continue;
+                if (id.rfind("fac_", 0) == 0 && cm && im && iw && bm) {
+                    int fidx = std::atoi(id.c_str() + 4);
+                    cm->assignFactoryAtStop(_stopDetailGX, _stopDetailGY, fidx,
+                                            *bm, *this, *im, *iw, 20);
+                }
+                return true;
+            }
+        }
+    }
+    return _stopDetailOpen;
+}
+
+void RoadManager::drawStopDetailPanel(sf::RenderWindow& w, const CitizenManager* cm,
+                                      const IndustrialManager* im, const IndustryWorkers* iw,
+                                      const BuildingManager* bm) {
+    if (!_stopDetailOpen) return;
+
+    _stopDetailMousePos = w.mapPixelToCoords(sf::Mouse::getPosition(w), w.getDefaultView());
+    _stopDetailH = computeStopDetailHeight(im, iw);
+    _stopDetailHits.clear();
+
+    sf::RectangleShape bg({RM_STOP_DETAIL_W, _stopDetailH});
+    bg.setPosition(_stopDetailPos);
+    bg.setFillColor(sf::Color(10, 10, 10, 245));
+    bg.setOutlineColor(sf::Color::White);
+    bg.setOutlineThickness(3.f);
+    w.draw(bg);
+
+    sf::RectangleShape tb({RM_STOP_DETAIL_W, RM_TITLEBAR_H});
+    tb.setPosition(_stopDetailPos);
+    tb.setFillColor(sf::Color(200, 100, 0));
+    w.draw(tb);
+
+    sf::Text title(_font, "BUS STOP", RM_FONT_SIZE + 2);
+    title.setFillColor(sf::Color::White);
+    title.setStyle(sf::Text::Style::Bold);
+    title.setPosition({_stopDetailPos.x + 10.f, _stopDetailPos.y + 6.f});
+    w.draw(title);
+    drawDetailCloseButton(w, _closeBtn, _stopDetailPos, RM_STOP_DETAIL_W, RM_TITLEBAR_H,
+                          _stopDetailCloseRect);
+
+    int waitingAt = 0, walkingTo = 0, pending = 0;
+    int assignedFac = -1;
+    if (cm) {
+        cm->getStopCounts(_stopDetailGX, _stopDetailGY, waitingAt, walkingTo, pending, bm);
+        assignedFac = cm->getStopAssignedFactory(_stopDetailGX, _stopDetailGY);
+    }
+
+    float x = _stopDetailPos.x + 14.f;
+    float y = _stopDetailPos.y + RM_TITLEBAR_H + 14.f;
+    float lineH = static_cast<float>(RM_FONT_SIZE) + 10.f;
+    float btnW = RM_STOP_DETAIL_W - 28.f;
+
+    auto drawLine = [&](const std::string& txt, sf::Color col = sf::Color(220, 220, 220)) {
+        sf::Text t(_font, txt, RM_FONT_SIZE);
+        t.setFillColor(col);
+        t.setPosition({x, y});
+        w.draw(t);
+        y += lineH;
+    };
+
+    drawLine("Grid: " + std::to_string(_stopDetailGX) + ", " + std::to_string(_stopDetailGY),
+             sf::Color(180, 180, 180));
+    drawLine("At stop (waiting for bus): " + std::to_string(waitingAt), sf::Color(100, 220, 255));
+    drawLine("Walking to stop: " + std::to_string(walkingTo), sf::Color(120, 200, 255));
+    drawLine("Homes assigned (no factory yet): " + std::to_string(pending), sf::Color(255, 200, 100));
+
+    if (assignedFac >= 0 && im)
+        drawLine("Route factory: " + im->getDisplayName(im->getPlaced()[assignedFac].defId),
+                 sf::Color(120, 255, 120));
+    else
+        drawLine("Route factory: not set — pick below", sf::Color(255, 140, 80));
+
+    y += 4.f;
+    drawLine("--- Send commuters to factory ---", sf::Color(255, 160, 30));
+
+    if (im && iw) {
+        auto reachable = findReachableIndustrialIndices(
+            _stopDetailGX, _stopDetailGY, 1, 1, *im, 20);
+        bool any = false;
+        for (int idx : reachable) {
+            if (idx < 0 || idx >= static_cast<int>(im->getPlaced().size())) continue;
+            const auto& ind = im->getPlaced()[idx];
+            if (iw->maxWorkersFor(ind.defId) <= 0) continue;
+            any = true;
+            std::string lbl = "-> " + im->getDisplayName(ind.defId);
+            sf::FloatRect rect({x, y}, {btnW, 30.f});
+            bool hover = rect.contains(_stopDetailMousePos);
+            sf::RectangleShape b({btnW, 30.f});
+            b.setPosition({x, y});
+            b.setFillColor(hover ? sf::Color(240, 140, 30) : sf::Color(200, 100, 0));
+            w.draw(b);
+            sf::Text t(_font, lbl, RM_FONT_SIZE);
+            t.setFillColor(sf::Color::White);
+            t.setStyle(sf::Text::Style::Bold);
+            sf::FloatRect tbounds = t.getLocalBounds();
+            t.setOrigin({tbounds.position.x + tbounds.size.x / 2.f,
+                         tbounds.position.y + tbounds.size.y / 2.f});
+            t.setPosition({x + btnW / 2.f, y + 15.f});
+            w.draw(t);
+            _stopDetailHits.push_back({rect, "fac_" + std::to_string(idx)});
+            y += 36.f;
+        }
+        if (!any)
+            drawLine("No workplaces within 20 road tiles.", sf::Color(150, 150, 150));
     }
 }
